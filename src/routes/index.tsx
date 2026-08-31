@@ -481,7 +481,7 @@ function Scanner() {
   // Work is time-sliced so the tab stays responsive while a full-universe pass runs.
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [progress, setProgress] = useState({ done: 0, total: 0, assets: 0 });
-  type ScanRequest = { market: MarketResponse; fee: number; maxLegs: number; useConvert: boolean; convertSpread: number; universe: Universe; id: number };
+  type ScanRequest = { market: MarketResponse; fee: number; maxLegs: number; useConvert: boolean; convertSpread: number; universe: Universe; excludedSymbols: Set<string>; id: number };
   const [scanRequest, setScanRequest] = useState<ScanRequest | null>(null);
 
   const settings = { fee, maxLegs, useConvert, convertSpread, universe, excludedSymbols };
