@@ -441,6 +441,15 @@ function Scanner() {
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<"opportunities" | "markets">("opportunities");
   const [selected, setSelected] = useState<Opportunity | null>(null);
+  const [excludedSymbols, setExcludedSymbols] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem("loopline_excluded_symbols");
+      return saved ? new Set(JSON.parse(saved)) : new Set<string>();
+    } catch {
+      return new Set<string>();
+    }
+  });
+  const [excludeInput, setExcludeInput] = useState("");
 
   const scanningRef = useRef(false);
 
