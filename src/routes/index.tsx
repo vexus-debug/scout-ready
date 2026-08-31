@@ -190,6 +190,12 @@ function buildUsdIndex(instruments: Instrument[], tickers: Ticker[]) {
   const usd = new Map<string, number>([["USDT", 1], ["USDC", 1]]);
   const turnover = new Map<string, number>();
   const stocks = new Set<string>();
+  /**
+   * Assets Bybit can actually convert: a Convert quote only exists for coins that hold a live
+   * stablecoin (USDT/USDC) book on the venue. Anything without one is priced by inference only,
+   * so it must never be bridged by a synthetic Convert leg.
+   */
+  const convertible = new Set<string>(["USDT", "USDC"]);
 
   for (const instrument of instruments) {
     if (instrument.status !== "Trading") continue;
@@ -204,10 +210,15 @@ function buildUsdIndex(instruments: Instrument[], tickers: Ticker[]) {
     if (instrument.quoteCoin === "USDT" || instrument.quoteCoin === "USDC") {
       if (!usd.has(instrument.baseCoin)) usd.set(instrument.baseCoin, mid);
       turnover.set(instrument.baseCoin, Math.max(turnover.get(instrument.baseCoin) ?? 0, volume));
+      convertible.add(instrument.baseCoin);
+    }
+    if (instrument.baseCoin === "USDT" || instrument.baseCoin === "USDC") {
+      convertible.add(instrument.quoteCoin);
     }
   }
-  return { usd, turnover, stocks };
+  return { usd, turnover, stocks, convertible };
 }
+
 
 /**
  * A scan pass over the whole platform. Two complementary searches, both exhaustive:
@@ -239,6 +250,8 @@ function createScanPass(
   const stockAssets = index.stocks;
   const isStockAsset = (asset: string) => stockAssets.has(asset);
   const usd = index.usd;
+  /** Convert legs are only legal between assets that hold a live Bybit stablecoin book. */
+  const canConvert = (asset: string) => index.convertible.has(asset);
 
   // xStocks mode: USDT is the hub and only crypto, so it is the only start asset.
   const startSet = new Set<string>(universe === "xstocks" ? ["USDT"] : [...graph.keys(), ...usd.keys()]);
@@ -333,6 +346,8 @@ function createScanPass(
     const fromUsd = usd.get(from) ?? 0;
     const toUsd = usd.get(to) ?? 0;
     if (from === to || fromUsd <= 0 || toUsd <= 0) return null;
+    // Only bridge assets Bybit can actually convert between.
+    if (!canConvert(from) || !canConvert(to)) return null;
     return { symbol: `CONVERT:${from}->${to}`, from, to, side: "Convert", price: fromUsd / toUsd, stock: isStockAsset(from) || isStockAsset(to) };
   };
 
