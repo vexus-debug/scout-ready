@@ -484,7 +484,7 @@ function Scanner() {
   type ScanRequest = { market: MarketResponse; fee: number; maxLegs: number; useConvert: boolean; convertSpread: number; universe: Universe; id: number };
   const [scanRequest, setScanRequest] = useState<ScanRequest | null>(null);
 
-  const settings = { fee, maxLegs, useConvert, convertSpread, universe };
+  const settings = { fee, maxLegs, useConvert, convertSpread, universe, excludedSymbols };
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const marketRef = useRef(market);
