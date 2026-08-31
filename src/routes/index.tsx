@@ -476,6 +476,13 @@ function Scanner() {
     const timer = window.setInterval(() => { if (!scanningRef.current) void scan(); }, REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [autoRefresh, scan]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("loopline_excluded_symbols", JSON.stringify([...excludedSymbols]));
+    } catch {
+      // ignore storage errors
+    }
+  }, [excludedSymbols]);
 
   // Scanning is manual: a request snapshot is only created when the user hits "Scan now".
   // Work is time-sliced so the tab stays responsive while a full-universe pass runs.
