@@ -241,9 +241,10 @@ function createScanPass(
   useConvert: boolean,
   convertSpread: number,
   universe: Universe,
+  excludedSymbols: Set<string>,
 ) {
   // Universe filter: crypto drops xStocks/fiat; xstocks keeps only USDT-quoted xStocks; cross keeps all.
-  instruments = instruments.filter(universeFilter[universe]);
+  instruments = instruments.filter((instrument) => universeFilter[universe](instrument) && !excludedSymbols.has(instrument.symbol));
   const graph = buildGraph(instruments, tickers);
   for (const edges of graph.values()) edges.sort((a, b) => b.volume - a.volume);
   const index = buildUsdIndex(instruments, tickers);
@@ -440,6 +441,15 @@ function Scanner() {
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<"opportunities" | "markets">("opportunities");
   const [selected, setSelected] = useState<Opportunity | null>(null);
+  const [excludedSymbols, setExcludedSymbols] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem("loopline_excluded_symbols");
+      return saved ? new Set(JSON.parse(saved)) : new Set<string>();
+    } catch {
+      return new Set<string>();
+    }
+  });
+  const [excludeInput, setExcludeInput] = useState("");
 
   const scanningRef = useRef(false);
 
@@ -466,15 +476,22 @@ function Scanner() {
     const timer = window.setInterval(() => { if (!scanningRef.current) void scan(); }, REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [autoRefresh, scan]);
+  useEffect(() => {
+    try {
+      localStorage.setItem("loopline_excluded_symbols", JSON.stringify([...excludedSymbols]));
+    } catch {
+      // ignore storage errors
+    }
+  }, [excludedSymbols]);
 
   // Scanning is manual: a request snapshot is only created when the user hits "Scan now".
   // Work is time-sliced so the tab stays responsive while a full-universe pass runs.
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [progress, setProgress] = useState({ done: 0, total: 0, assets: 0 });
-  type ScanRequest = { market: MarketResponse; fee: number; maxLegs: number; useConvert: boolean; convertSpread: number; universe: Universe; id: number };
+  type ScanRequest = { market: MarketResponse; fee: number; maxLegs: number; useConvert: boolean; convertSpread: number; universe: Universe; excludedSymbols: Set<string>; id: number };
   const [scanRequest, setScanRequest] = useState<ScanRequest | null>(null);
 
-  const settings = { fee, maxLegs, useConvert, convertSpread, universe };
+  const settings = { fee, maxLegs, useConvert, convertSpread, universe, excludedSymbols };
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const marketRef = useRef(market);
@@ -489,7 +506,7 @@ function Scanner() {
 
   useEffect(() => {
     if (!scanRequest) return;
-    const pass = createScanPass(scanRequest.market.instruments, scanRequest.market.tickers, scanRequest.fee, scanRequest.maxLegs, scanRequest.useConvert, scanRequest.convertSpread, scanRequest.universe);
+    const pass = createScanPass(scanRequest.market.instruments, scanRequest.market.tickers, scanRequest.fee, scanRequest.maxLegs, scanRequest.useConvert, scanRequest.convertSpread, scanRequest.universe, scanRequest.excludedSymbols);
     const total = pass.steps.length;
     const best = new Map<string, Opportunity>();
     let cursor = 0;
@@ -582,6 +599,61 @@ function Scanner() {
             <div className="mb-6 flex items-center justify-between"><div><div className="eyebrow">Scanner controls</div><h2 className="mt-1 text-lg font-semibold text-foreground">Tune the signal</h2></div><SlidersHorizontal className="h-5 w-5 text-muted-foreground" /></div>
             <div className="space-y-5">
               <label className="block"><span className="mb-2 flex items-center justify-between text-xs font-medium text-foreground">Route universe <span className="font-mono text-muted-foreground">{copy.tag}</span></span><select className="select-control h-10 w-full rounded-md px-3 text-sm" value={universe} onChange={(event) => setUniverse(event.target.value as Universe)}><option value="crypto">Crypto only</option><option value="crypto-fiat">Crypto + fiat</option><option value="crypto-stocks">Crypto + stocks</option><option value="stocks-fiat">Stocks + fiat</option><option value="xstocks">xStocks only (USDT hub)</option><option value="cross">Cross-asset (crypto + stocks + fiat)</option></select></label>
+              <div className="block">
+                <span className="mb-2 flex items-center justify-between text-xs font-medium text-foreground">Excluded instruments <span className="font-mono text-muted-foreground">{excludedSymbols.size}</span></span>
+                <div className="flex gap-2">
+                  <input
+                    className="input-control mono h-10 flex-1 rounded-md px-3 text-sm"
+                    placeholder="e.g. BTCUSDT"
+                    value={excludeInput}
+                    onChange={(event) => setExcludeInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        const symbol = excludeInput.trim().toUpperCase();
+                        if (symbol) {
+                          setExcludedSymbols((prev) => new Set([...prev, symbol]));
+                          setExcludeInput("");
+                        }
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const symbol = excludeInput.trim().toUpperCase();
+                      if (symbol) {
+                        setExcludedSymbols((prev) => new Set([...prev, symbol]));
+                        setExcludeInput("");
+                      }
+                    }}
+                    disabled={!excludeInput.trim()}
+                  >
+                    Add
+                  </Button>
+                </div>
+                {excludedSymbols.size > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {[...excludedSymbols].map((symbol) => (
+                      <span key={symbol} className="inline-flex items-center gap-1 rounded-md bg-surface-subtle px-2 py-1 font-mono text-xs text-foreground">
+                        {symbol}
+                        <button
+                          aria-label={`Remove ${symbol}`}
+                          className="ml-1 text-muted-foreground hover:text-coral"
+                          onClick={() => setExcludedSymbols((prev) => {
+                            const next = new Set(prev);
+                            next.delete(symbol);
+                            return next;
+                          })}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
               <label className="block"><span className="mb-2 flex items-center justify-between text-xs font-medium text-foreground">Minimum net profit <CircleHelp className="h-3.5 w-3.5 text-muted-foreground" /></span><div className="relative"><input className="input-control mono h-10 w-full rounded-md px-3 pr-10 text-sm" type="number" min="0" step="0.05" value={minProfit} onChange={(event) => setMinProfit(event.target.value)} /><span className="absolute right-3 top-2.5 font-mono text-xs text-muted-foreground">%</span></div></label>
               <label className="block"><span className="mb-2 flex items-center justify-between text-xs font-medium text-foreground">Fee per leg <span className="font-mono text-muted-foreground">{(fee * 100).toFixed(2)}%</span></span><input className="w-full accent-primary" type="range" min="0" max="0.003" step="0.0001" value={fee} onChange={(event) => setFee(Number(event.target.value))} /></label>
               <label className="block"><span className="mb-2 flex items-center justify-between text-xs font-medium text-foreground">Max legs per cycle <span className="font-mono text-muted-foreground">{maxLegs}</span></span><select className="select-control h-10 w-full rounded-md px-3 text-sm" value={maxLegs} onChange={(event) => setMaxLegs(Number(event.target.value))}><option value={3}>3 legs</option><option value={4}>4 legs</option><option value={5}>5 legs (slow)</option></select></label>
