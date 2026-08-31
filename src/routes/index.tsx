@@ -241,9 +241,10 @@ function createScanPass(
   useConvert: boolean,
   convertSpread: number,
   universe: Universe,
+  excludedSymbols: Set<string>,
 ) {
   // Universe filter: crypto drops xStocks/fiat; xstocks keeps only USDT-quoted xStocks; cross keeps all.
-  instruments = instruments.filter(universeFilter[universe]);
+  instruments = instruments.filter((instrument) => universeFilter[universe](instrument) && !excludedSymbols.has(instrument.symbol));
   const graph = buildGraph(instruments, tickers);
   for (const edges of graph.values()) edges.sort((a, b) => b.volume - a.volume);
   const index = buildUsdIndex(instruments, tickers);
