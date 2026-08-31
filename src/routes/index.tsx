@@ -344,6 +344,8 @@ function createScanPass(
     const fromUsd = usd.get(from) ?? 0;
     const toUsd = usd.get(to) ?? 0;
     if (from === to || fromUsd <= 0 || toUsd <= 0) return null;
+    // Only bridge assets Bybit can actually convert between.
+    if (!canConvert(from) || !canConvert(to)) return null;
     return { symbol: `CONVERT:${from}->${to}`, from, to, side: "Convert", price: fromUsd / toUsd, stock: isStockAsset(from) || isStockAsset(to) };
   };
 
