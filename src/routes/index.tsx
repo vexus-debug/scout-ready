@@ -190,6 +190,12 @@ function buildUsdIndex(instruments: Instrument[], tickers: Ticker[]) {
   const usd = new Map<string, number>([["USDT", 1], ["USDC", 1]]);
   const turnover = new Map<string, number>();
   const stocks = new Set<string>();
+  /**
+   * Assets Bybit can actually convert: a Convert quote only exists for coins that hold a live
+   * stablecoin (USDT/USDC) book on the venue. Anything without one is priced by inference only,
+   * so it must never be bridged by a synthetic Convert leg.
+   */
+  const convertible = new Set<string>(["USDT", "USDC"]);
 
   for (const instrument of instruments) {
     if (instrument.status !== "Trading") continue;
@@ -204,10 +210,15 @@ function buildUsdIndex(instruments: Instrument[], tickers: Ticker[]) {
     if (instrument.quoteCoin === "USDT" || instrument.quoteCoin === "USDC") {
       if (!usd.has(instrument.baseCoin)) usd.set(instrument.baseCoin, mid);
       turnover.set(instrument.baseCoin, Math.max(turnover.get(instrument.baseCoin) ?? 0, volume));
+      convertible.add(instrument.baseCoin);
+    }
+    if (instrument.baseCoin === "USDT" || instrument.baseCoin === "USDC") {
+      convertible.add(instrument.quoteCoin);
     }
   }
-  return { usd, turnover, stocks };
+  return { usd, turnover, stocks, convertible };
 }
+
 
 /**
  * A scan pass over the whole platform. Two complementary searches, both exhaustive:
