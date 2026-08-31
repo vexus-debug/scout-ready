@@ -250,6 +250,8 @@ function createScanPass(
   const stockAssets = index.stocks;
   const isStockAsset = (asset: string) => stockAssets.has(asset);
   const usd = index.usd;
+  /** Convert legs are only legal between assets that hold a live Bybit stablecoin book. */
+  const canConvert = (asset: string) => index.convertible.has(asset);
 
   // xStocks mode: USDT is the hub and only crypto, so it is the only start asset.
   const startSet = new Set<string>(universe === "xstocks" ? ["USDT"] : [...graph.keys(), ...usd.keys()]);
